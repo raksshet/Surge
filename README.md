@@ -23,6 +23,16 @@ AZURE CLI is used to authenticate from local system
 
 learn about **state file**
 
+**terraform destroy** deletes all the resource from main.tf file
+
+if the code block is commented then terraform will detroy
+
+In resource group some fields are mandatory and some are optional. In mandatory field can be modified some properties can't be modified
+
+example: resource group name can't be modified .Tag properties can be modified.
+
+
+
 
 
 
