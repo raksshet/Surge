@@ -41,6 +41,25 @@ variable "resource_group_name" {
 ```
 variable accepts user input while running terraform command.
 
+This approach is not practical as this requires to give all the inputs.
+
+to overcome this problem create a tfvars file with variables specific to environments.
+
+dev.tfvars
+hom.tfvars
+
+int this mention the variables
+
+dev.tfvars
+  resource_group_name="dev"
+
+qa.tfvars
+  resource_group_name="qa"
+
+while running the terraform plan --var-file="dev.tfvars"
+  
+
+
 
 
 
