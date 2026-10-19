@@ -31,6 +31,16 @@ In resource group some fields are mandatory and some are optional. In mandatory 
 
 example: resource group name can't be modified .Tag properties can be modified.
 
+In variables.tf file create the variables 
+
+```
+variable "resource_group_name" {
+  description="The name of the resource group"
+  type = string
+}
+```
+variable accepts user input while running terraform command.
+
 
 
 
