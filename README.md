@@ -57,7 +57,27 @@ qa.tfvars
   resource_group_name="qa"
 
 while running the terraform plan --var-file="dev.tfvars"
-  
+
+backend configuration to redirect the state of the run to write to specifi file
+
+to store state file in storage account .In the main.tf file add the block as below
+
+```
+terraform {
+  backend {
+    resource_group_name = "demo"
+    storage_account_name=var.storage_account_name
+    container_name = "tfstate"
+    key = "terraform.tfstate"    
+  }
+}
+```
+
+explained about how to use backend_config file. we can have dev_backend and qa_backend file with the details of storage account files to write to write the state file information to two seperate files.
+
+azure module already available in azure registery we can use them as it is or customize it
+
+
 
 
 
