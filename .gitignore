@@ -1,14 +1,25 @@
 # Ignore Terraform downloaded providers and working directory
+**/.terraform/
 terraform/.terraform/
+kfc-terraform/.terraform/
+git-terraform/.terraform/
 
 # Ignore Terraform state files
 terraform/*.tfstate
 terraform/*.tfstate.*
+kfc-terraform/*.tfstate
+kfc-terraform/*.tfstate.*
 
 # Ignore variable files that may contain secrets
 terraform/*.tfvars
 terraform/*.tfvars.json
+kfc-terraform/*.tfvars
+kfc-terraform/*.tfvars.json
+git-terraform/*.tfvars
+git-terraform/*.tfvars.json
 
 # Ignore crash logs
 terraform/crash.log
 terraform/crash.*.log
+kfc-terraform/crash.log
+kfc-terraform/crash.*.log

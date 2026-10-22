@@ -1,0 +1,448 @@
+# KFC Azure Terraform — Jira Implementation Roadmap
+
+I recommend treating this as a real infrastructure project rather than a collection of Terraform tutorials. You'll build the KFC DEV environment first, validate it, and then reuse the same design for QA and HOM.
+
+By the end, you should be able to take an infrastructure requirement, design Terraform code, deploy it safely, troubleshoot failures, and explain the decisions to a DevOps team.
+
+## 1. Target architecture
+
+Azure subscription
+
+Terraform-managed KFC infrastructure
+
+Resource group — `rg-kfc-dev-ci-001`
+
+Networking
+
+VNet, subnet, NSG, NIC, public IP
+
+Storage
+
+Storage account
+
+Container registry
+
+Azure Container Registry
+
+Compute
+
+Two Jenkins Linux VMs
+
+Kubernetes
+
+Azure Kubernetes Service (AKS)
+
+We'll use five Terraform modules: `vnet`, `storage`, `acr`, `linux-vm`, and `aks`. Root-level files will orchestrate them, and each environment will have its own configuration and state.
+
+## 2. Jira backlog — implementation order
+
+I suggest 6 epics and 24 Jira tasks, progressing from Terraform fundamentals to a reusable, multi-environment infrastructure platform.
+
+## Roadmap at a glance
+
+EPIC 1 — Terraform foundations
+
+TF-01 to TF-04 · Configuration and state
+
+EPIC 2 — Network and storage
+
+TF-05 to TF-08 · Resource groups, VNet, subnet, storage
+
+EPIC 3 — Linux VMs and reusable modules
+
+TF-09 to TF-12 · SSH, `for_each`, module interfaces
+
+EPIC 4 — ACR and AKS
+
+TF-13 to TF-15 · Containers and Kubernetes
+
+EPIC 5 — Production practices
+
+TF-16 to TF-20 · State, import, security, automation
+
+EPIC 6 — QA and HOM rollout
+
+TF-21 to TF-24 · Reuse, drift, recovery and cleanup
+
+## EPIC 1 — Terraform foundations
+
+Goal: Understand how Terraform evaluates configuration, manages state, and plans infrastructure changes.
+
+TF-01 — Set up Terraform project and Git repository
+
+Type: Task · Priority: Highest
+
+Implement: Create `KFC-Terraform/`, initialize Git, create `main.tf`, `variable.tf`, `dev.tfvars`, `qa.tfvars`, and `.gitignore`.
+
+Concepts: Repository structure, Terraform CLI, provider configuration, `.gitignore`.
+
+Expected output: A Git repository containing the initial Terraform files. `terraform init`, `terraform fmt`, and `terraform validate` complete successfully after the minimum valid configuration is added.
+
+Acceptance criteria:
+
+- Terraform files are committed to Git.
+- State files, plan files, credentials and private keys are excluded from Git.
+- AzureRM provider version is constrained.
+
+TF-02 — Implement Terraform variables and data types
+
+Type: Task · Priority: Highest
+
+Implement: Define `project`, `environment`, `location`, `region_code`, `vnet_address_space`, `subnet_address_prefixes`, and VM configuration variables in `variable.tf`.
+
+Concepts: `string`, `number`, `bool`, `list`, `map`, `object`, defaults, type constraints, validation.
+
+Expected output: Invalid environment names or incorrect variable types are rejected before deployment.
+
+Acceptance criteria:
+
+- DEV values are in `dev.tfvars`.
+- QA values are in `qa.tfvars`.
+- Changing environment inputs changes generated names and configuration without editing resource definitions.
+
+TF-03 — Learn plan, apply, destroy and dependency graph
+
+Type: Task · Priority: Highest
+
+Implement: Provision a basic resource group and experiment with plans, applies, resource references, and destruction.
+
+Concepts: Desired state, dependency graph, `terraform plan`, `apply`, `destroy`, `fmt`, `validate`.
+
+Expected output: You can predict what Terraform will create, update, replace, or destroy before approving changes.
+
+Acceptance criteria:
+
+- Save and apply a reviewed plan file.
+- Run `terraform graph` and understand the dependency relationships.
+- Explain why referencing a resource ID creates an implicit dependency.
+
+TF-04 — Understand state and environment isolation
+
+Type: Task · Priority: Highest
+
+Implement: Examine `terraform.tfstate`, `terraform state list`, `terraform state show`, and separate DEV/QA state files.
+
+Concepts: State, resource addresses, state backup, state locking, state isolation.
+
+Expected output: DEV and QA can be planned independently without Terraform confusing one environment's resources with the other's.
+
+Acceptance criteria:
+
+- DEV and QA have independent state.
+- State backups are stored securely.
+- You can explain why deleting Azure resources and deleting Terraform state are different operations.
+
+## EPIC 2 — Network and storage foundation
+
+Goal: Create the reusable foundation that all subsequent KFC resources will depend on.
+
+TF-05 — Create the KFC DEV resource group
+
+File: Root `main.tf`
+
+Expected output: Resource group `rg-kfc-dev-ci-001` in `centralindia`, with project, environment and ownership tags.
+
+Concepts: Resource blocks, naming conventions, variables, tags, resource references.
+
+Acceptance criteria: Terraform creates the resource group and exposes its name and ID.
+
+TF-06 — Build the reusable VNet module
+
+Files: `modules/vnet/main.tf`, `variable.tf`, `outputs.tf`
+
+Expected output:
+
+- VNet: `vnet-kfc-dev-ci-001`
+- Subnet: `snet-kfc-dev-001`
+- VNet CIDR: `10.10.0.0/16`
+- Subnet CIDR: `10.10.1.0/24`
+
+Concepts: Modules, input variables, list types, outputs, resource dependencies.
+
+Acceptance criteria: The VNet and subnet are created and their IDs can be accessed through module outputs.
+
+TF-07 — Build the reusable storage module
+
+Files: `modules/storage/main.tf`, `variable.tf`, `outputs.tf`
+
+Expected output: Storage account following `stkfcdev` plus a globally unique suffix, using Standard/LRS and public blob access disabled.
+
+Concepts: Modules, variables, validation, outputs, Azure naming restrictions.
+
+Acceptance criteria: Terraform creates the account and exposes its name and resource ID.
+
+TF-08 — Implement root outputs and module integration
+
+File: Root `main.tf` or root `outputs.tf`
+
+Expected output: `terraform output` returns resource group, storage account, VNet and subnet identifiers.
+
+Concepts: Output blocks, module output references, dependency inference.
+
+Acceptance criteria: Another module can consume `module.vnet.subnet_id` without hardcoding an Azure resource ID.
+
+## EPIC 3 — Linux VMs and reusable infrastructure
+
+Goal: Build a secure Jenkins VM implementation that can be reused across environments and projects.
+
+TF-09 — Implement Linux VM networking and SSH security
+
+Files: `modules/linux-vm/main.tf`, `variable.tf`
+
+Expected output: A Linux VM can be accessed using an SSH key, with SSH ingress restricted to an approved source IP.
+
+Concepts: NSGs, CIDR notation, NICs, public IPs, SSH keys, secure inputs.
+
+Acceptance criteria: Port 22 is not open to `0.0.0.0/0`. The private key is never committed to Git.
+
+TF-10 — Create two Jenkins VMs using `for_each`
+
+Files: Root `main.tf`, `variable.tf`, `dev.tfvars`, `modules/linux-vm/*`
+
+Expected output:
+
+- `vm-kfc-dev-jenkins01-001`
+- `vm-kfc-dev-jenkins02-001`
+
+Concepts: `for_each`, maps, objects, stable resource addresses, reusable modules.
+
+Acceptance criteria:
+
+- One reusable VM resource definition creates both instances.
+- VM-specific sizes and settings are configurable.
+- Removing one map key affects only that VM, subject to its dependencies.
+
+TF-11 — Reuse the Linux VM module in a second project
+
+Files: Separate practice project and shared `linux-vm` module
+
+Expected output: A second project can call the same module to create a differently named Linux VM with a different size and tags.
+
+Concepts: Local and Git module sources, input contracts, outputs, module versioning.
+
+Acceptance criteria: No copying of the module implementation is required. The caller provides its own resource group, network interface and VM configuration.
+
+TF-12 — Refactor and version reusable modules
+
+Expected output: A tagged, reusable version of the Linux VM module, such as `v1.0.0`, with documented inputs and outputs.
+
+Concepts: Git tags, module version pinning, module upgrades, `moved` blocks.
+
+Acceptance criteria: Existing resources are preserved when their Terraform addresses change. A module upgrade is tested through a plan before applying it.
+
+## EPIC 4 — Container infrastructure
+
+Goal: Create the container registry and managed Kubernetes infrastructure used by a realistic delivery platform.
+
+TF-13 — Create the ACR module
+
+Files: `modules/acr/main.tf`, `variable.tf`, `outputs.tf`
+
+Expected output: Azure Container Registry named according to the KFC DEV naming convention, with a unique globally available name.
+
+Concepts: Modules, outputs, naming constraints, access configuration.
+
+Acceptance criteria: The registry is created and its ID and login server are exposed. Admin credentials are not hardcoded.
+
+TF-14 — Create the AKS module
+
+Files: `modules/aks/main.tf`, `variable.tf`, `outputs.tf`
+
+Expected output: A development Kubernetes cluster named `aks-kfc-dev-ci-001`, configured with an appropriate node pool, networking, identity and monitoring.
+
+Concepts: Complex resources, objects, lists, identity, outputs, dependencies and data sources.
+
+Acceptance criteria: The cluster deploys successfully, its subnet configuration is valid, and access uses an appropriate Azure identity. Check regional quotas and cost before deployment.
+
+TF-15 — Integrate ACR and AKS
+
+Expected output: AKS workloads can pull authorized container images from ACR.
+
+Concepts: Cross-module outputs, role assignments, managed identity, dependencies.
+
+Acceptance criteria: Image-pull permissions are configured without embedding registry passwords in Terraform code.
+
+## EPIC 5 — Real-world Terraform engineering
+
+Goal: Learn how to manage existing infrastructure, secure state and credentials, and automate quality checks.
+
+TF-16 — Read existing Azure resources with data blocks
+
+Expected output: Terraform retrieves an existing resource group, VNet or subnet without creating a duplicate.
+
+Concepts: `data` blocks, data source arguments, IDs and references.
+
+Acceptance criteria: The configuration can consume the existing subnet ID and use it as an input to another module.
+
+TF-17 — Import an existing Azure resource
+
+Expected output: A manually created test resource becomes tracked by Terraform without being unnecessarily recreated.
+
+Concepts: `import` blocks, resource IDs, state, configuration matching.
+
+Acceptance criteria: The resource is imported, configuration matches the real resource, and the subsequent plan has no unexpected replacement. Do not import resources already tracked in state.
+
+TF-18 — Configure remote state and locking
+
+Expected output: Terraform state is stored in an Azure Storage backend with access control, locking and recovery procedures.
+
+Concepts: Backend configuration, state migration, locking, state security.
+
+Acceptance criteria: DEV and QA use separate backend keys or equivalent isolated state configurations. Bootstrap the backend before migrating existing state.
+
+TF-19 — Implement security and lifecycle controls
+
+Expected output: Secure storage settings, controlled SSH access, appropriate VM and AKS identities, and protection against accidental destructive changes where justified.
+
+Concepts: `sensitive`, lifecycle meta-arguments, `ignore_changes`, `prevent_destroy`, explicit dependencies, secret handling.
+
+Acceptance criteria: Sensitive values are not committed to Git. Lifecycle rules are used only when there is a clear reason, not to hide unexpected drift.
+
+TF-20 — Automate Terraform validation in GitHub Actions
+
+Expected output: A GitHub Actions workflow runs formatting, validation and a plan check on pull requests.
+
+Concepts: CI, workflow files, runners, environment variables, provider authentication.
+
+Acceptance criteria: Invalid Terraform fails the workflow. Production apply is not triggered automatically by an unreviewed pull request.
+
+## EPIC 6 — Multi-environment rollout and operations
+
+Goal: Prove that the infrastructure can be reused, changed safely and recovered.
+
+TF-21 — Deploy QA using the same modules
+
+Expected output: QA resources use `qa.tfvars` and separate state, with naming such as `rg-kfc-qa-ci-001` and `vnet-kfc-qa-ci-001`.
+
+Concepts: Module reuse, environment configuration, isolated state, IP planning.
+
+Acceptance criteria: QA deployment does not modify DEV resources. QA uses non-overlapping address ranges, such as `10.20.0.0/16`.
+
+TF-22 — Add the HOM environment
+
+Expected output: HOM can be provisioned by adding `hom.tfvars` and its state configuration, without duplicating the module implementation.
+
+Concepts: Configuration reuse, variables, maps, naming and environment isolation.
+
+Acceptance criteria: HOM uses its own address range and globally unique storage/registry names where required.
+
+TF-23 — Test drift detection and recovery
+
+Expected output: A controlled manual change in Azure is detected by Terraform, and the desired configuration can be restored safely.
+
+Concepts: Refresh and plan behavior, state inspection, drift, recovery and troubleshooting.
+
+Acceptance criteria: You can identify the changed resource, interpret the proposed correction and avoid unintended replacement.
+
+TF-24 — Complete end-to-end validation and cleanup
+
+Expected output: Documented successful deployments, resource inventories, outputs, state locations, troubleshooting notes and cleanup procedures.
+
+Concepts: Full lifecycle management, verification, documentation, safe destruction.
+
+Acceptance criteria: DEV, QA and HOM can be managed independently. Costly resources are destroyed when no longer needed, and remote state is retained until the environment teardown is verified.
+
+## 3. Naming conventions for Jira and Azure resources
+
+Use the following names consistently in your tickets and implementation.
+
+| Asset          | DEV                        | QA                        | HOM                        |
+| -------------- | -------------------------- | ------------------------- | -------------------------- |
+| Resource group | `rg-kfc-dev-ci-001`        | `rg-kfc-qa-ci-001`        | `rg-kfc-hom-ci-001`        |
+| VNet           | `vnet-kfc-dev-ci-001`      | `vnet-kfc-qa-ci-001`      | `vnet-kfc-hom-ci-001`      |
+| Subnet         | `snet-kfc-dev-001`         | `snet-kfc-qa-001`         | `snet-kfc-hom-001`         |
+| Jenkins VM 1   | `vm-kfc-dev-jenkins01-001` | `vm-kfc-qa-jenkins01-001` | `vm-kfc-hom-jenkins01-001` |
+| Jenkins VM 2   | `vm-kfc-dev-jenkins02-001` | `vm-kfc-qa-jenkins02-001` | `vm-kfc-hom-jenkins02-001` |
+| AKS            | `aks-kfc-dev-ci-001`       | `aks-kfc-qa-ci-001`       | `aks-kfc-hom-ci-001`       |
+
+Storage account and ACR names have Azure-specific restrictions and global uniqueness requirements, so use short lowercase names with unique suffixes rather than applying the standard hyphenated convention literally.
+
+## 4. Terraform concepts coverage checklist
+
+Use this as your final skills checklist when closing the Jira epic.
+
+## Learning checklist
+
+0/26 complete
+
+### Fundamentals
+
+Providers and version constraints
+
+Resources and references
+
+Strings, numbers and booleans
+
+Lists, maps and objects
+
+Variable defaults and validation
+
+Locals and expressions
+
+Outputs
+
+Implicit and explicit dependencies
+
+### Reusable infrastructure
+
+Modules and module sources
+
+Module input/output contracts
+
+for_each and count
+
+Dynamic blocks
+
+Lifecycle meta-arguments
+
+moved blocks and resource addresses
+
+### State and existing resources
+
+State inspection and backup
+
+Separate environment states
+
+Remote backend and locking
+
+Data sources
+
+Import blocks
+
+Drift detection and recovery
+
+### Delivery and security
+
+Plan, apply and destroy
+
+SSH key authentication
+
+Sensitive values and secrets
+
+Azure managed identities and RBAC
+
+Git and module versioning
+
+CI validation and reviewed plans
+
+Copy checklist to README
+
+A few additional concepts, such as `locals`, `count`, and dynamic blocks, are included even though they aren't central to your initial resource list. They are useful in real-world Terraform projects.
+
+## 5. How to use this roadmap in Jira
+
+Create six Epics, then add the 24 tasks under the corresponding Epic. Use the IDs above as proposed ticket identifiers in your documentation; Jira will assign its own issue keys when you create the tickets.
+
+Recommended workflow for every task:
+
+1. Create a feature branch in Git.
+2. Implement the Terraform change.
+3. Run `terraform fmt -recursive`, `terraform validate`, and a plan.
+4. Review the plan, especially any resource replacement or destruction.
+5. Apply only after review.
+6. Verify the Azure resources and Terraform outputs.
+7. Update the README and close the Jira task with evidence.
+
+I would start with TF-01 through TF-04, then progress in order. Do not create AKS and both Jenkins VMs before the foundations and state strategy are tested. AKS can incur meaningful ongoing costs, so deploy it only when you're ready to complete its learning tasks.
+
+By the end of TF-24, you'll have more than a working Azure environment: you'll have practised the core Terraform workflow used in real infrastructure projects, including reusable code, safe state management, automation and multi-environment deployment.
